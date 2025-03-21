@@ -35,10 +35,7 @@ from agent_gateway.tools.snowflake_prompts import OUTPUT_PROMPT
 from agent_gateway.tools.snowflake_prompts import (
     PLANNER_PROMPT as SNOWFLAKE_PLANNER_PROMPT,
 )
-from agent_gateway.tools.utils import (
-    get_tag,
-    parse_complete_reponse,
-)
+from agent_gateway.tools.utils import get_tag, parse_complete_reponse, _get_connection
 
 
 class AgentGatewayError(Exception):
@@ -51,10 +48,10 @@ class AgentGatewayError(Exception):
 class CortexCompleteAgent:
     """Self defined agent for Cortex gateway."""
 
-    def __init__(self, session, llm) -> None:
+    def __init__(self, snowflake_connection, llm) -> None:
         self.llm = llm
-        self.session = session
-        self.session.connection.cursor().execute(
+        self.connection = snowflake_connection
+        self.connection.cursor().execute(
             f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
         )
 
@@ -69,19 +66,15 @@ class CortexCompleteAgent:
             for message in messages
         ]
         req = CompleteRequest(model=self.llm, messages=messages)
-        res = (
-            Root(self.session.connection)
-            .cortex_inference_service.complete(req)
-            .events()
-        )
+        res = Root(self.connection).cortex_inference_service.complete(req).events()
         return parse_complete_reponse(res)
 
 
 class SummarizationAgent(Tool):
-    def __init__(self, session, agent_llm):
+    def __init__(self, connection, agent_llm):
         tool_name = "summarize"
         tool_description = "Concisely summarizes cortex search output"
-        summarizer = CortexCompleteAgent(session=session, llm=agent_llm)
+        summarizer = CortexCompleteAgent(snowflake_connection=connection, llm=agent_llm)
         super().__init__(
             name=tool_name, func=summarizer.arun, description=tool_description
         )
@@ -131,16 +124,17 @@ class Agent:
             planner_stream: Whether to stream the planning.
 
         """
+        self.snowflake_connection = _get_connection(snowflake_connection)
         if not planner_example_prompt_replan:
             planner_example_prompt_replan = planner_example_prompt
 
         summarizer = SummarizationAgent(
-            session=snowflake_connection, agent_llm=agent_llm
+            connection=self.snowflake_connection, agent_llm=agent_llm
         )
         tools_with_summarizer = tools + [summarizer]
 
         self.planner = Planner(
-            session=snowflake_connection,
+            connection=self.snowflake_connection,
             llm=planner_llm,
             example_prompt=planner_example_prompt,
             example_prompt_replan=planner_example_prompt_replan,
@@ -148,7 +142,9 @@ class Agent:
             stop=planner_stop,
         )
 
-        self.agent = CortexCompleteAgent(session=snowflake_connection, llm=agent_llm)
+        self.agent = CortexCompleteAgent(
+            snowflake_connection=self.snowflake_connection, llm=agent_llm
+        )
         self.fusion_prompt = fusion_prompt
         self.fusion_prompt_final = fusion_prompt_final or fusion_prompt
         self.planner_stream = planner_stream

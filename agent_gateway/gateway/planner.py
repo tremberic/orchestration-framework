@@ -170,7 +170,7 @@ class StreamingGraphParser:
 class Planner:
     def __init__(
         self,
-        session: object,
+        connection: object,
         llm: str,
         example_prompt: str,
         example_prompt_replan: str,
@@ -178,7 +178,7 @@ class Planner:
         stop: Optional[list[str]],
     ):
         self.llm = llm
-        self.session = session
+        self.connection = connection
         self.tools = tools
 
         tools_without_summarizer = [i for i in self.tools if (i.name != "summarize")]
@@ -220,11 +220,7 @@ class Planner:
             for message in messages
         ]
         req = CompleteRequest(model=self.llm, messages=messages)
-        res = (
-            Root(self.session.connection)
-            .cortex_inference_service.complete(req)
-            .events()
-        )
+        res = Root(self.connection).cortex_inference_service.complete(req).events()
         return parse_complete_reponse(res)
 
     async def plan(self, inputs: dict, is_replan: bool, **kwargs: Any):
