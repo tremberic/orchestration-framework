@@ -70,9 +70,14 @@ class CortexSearchTool(Tool):
             name=tool_name, description=tool_description, func=self.asearch
         )
         self.connection = _get_connection(snowflake_connection)
-        self.connection.cursor().execute(
-            f"alter session set query_tag='{get_tag('CortexSearchTool')}'"
-        )
+        if _determine_runtime():
+            self.connection.connection.cursor().execute(
+                f"alter session set query_tag='{get_tag('CortexSearchTool')}'"
+            )
+        else:
+            self.connection.cursor().execute(
+                f"alter session set query_tag='{get_tag('CortexSearchTool')}'"
+            )
         self.k = k
         self.retrieval_columns = retrieval_columns
         self.service_name = service_name
@@ -153,11 +158,19 @@ class CortexSearchTool(Tool):
     def _get_search_service_attribute(
         self, search_service_name: str, attribute: str
     ) -> list[str]:
-        df = (
-            self.connection.cursor(cursor_class=DictCursor)
-            .execute("SHOW CORTEX SEARCH SERVICES")
-            .fetchall()
-        )
+        if not _determine_runtime():
+            df = (
+                self.connection.cursor(cursor_class=DictCursor)
+                .execute("SHOW CORTEX SEARCH SERVICES")
+                .fetchall()
+            )
+        else:
+            df = (
+                self.connection.connection.cursor(cursor_class=DictCursor)
+                .execute("SHOW CORTEX SEARCH SERVICES")
+                .fetchall()
+            )
+
         df = pd.DataFrame(df)
 
         if not df.empty:
@@ -167,11 +180,19 @@ class CortexSearchTool(Tool):
             return None
 
     def _get_search_table(self, search_service_name: str) -> str:
-        df = (
-            self.connection.cursor(cursor_class=DictCursor)
-            .execute("SHOW CORTEX SEARCH SERVICES")
-            .fetch_pandas_all()
-        )
+        if not _determine_runtime():
+            df = (
+                self.connection.cursor(cursor_class=DictCursor)
+                .execute("SHOW CORTEX SEARCH SERVICES")
+                .fetch_pandas_all()
+            )
+        else:
+            df = (
+                self.connection.connection.cursor(cursor_class=DictCursor)
+                .execute("SHOW CORTEX SEARCH SERVICES")
+                .fetch_pandas_all()
+            )
+
         df = pd.DataFrame(df)
         table_def = df.loc[df["name"] == search_service_name, "definition"].iloc[0]
         pattern = r"FROM\s+([\w\.]+)"
@@ -213,9 +234,15 @@ class CortexAnalystTool(Tool):
 
         super().__init__(name=tname, func=self.asearch, description=tool_description)
         self.connection = _get_connection(snowflake_connection)
-        self.connection.cursor().execute(
-            f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
-        )
+        if not _determine_runtime():
+            self.connection.cursor().execute(
+                f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
+            )
+        else:
+            self.connection.connection.cursor().execute(
+                f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
+            )
+
         self.FILE = semantic_model
         self.STAGE = stage
 
