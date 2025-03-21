@@ -29,7 +29,7 @@ from snowflake.snowpark import Session
 def _get_connection(
     connection: Union[Session, SnowflakeConnection],
 ) -> SnowflakeConnection:
-    if isinstance(connection, Session):
+    if isinstance(connection, Session) and not _determine_runtime():
         return getattr(connection, "connection")
     return connection
 
