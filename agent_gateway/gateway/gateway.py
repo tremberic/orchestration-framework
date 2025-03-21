@@ -35,7 +35,12 @@ from agent_gateway.tools.snowflake_prompts import OUTPUT_PROMPT
 from agent_gateway.tools.snowflake_prompts import (
     PLANNER_PROMPT as SNOWFLAKE_PLANNER_PROMPT,
 )
-from agent_gateway.tools.utils import get_tag, parse_complete_reponse, _get_connection
+from agent_gateway.tools.utils import (
+    get_tag,
+    parse_complete_reponse,
+    _get_connection,
+    _determine_runtime,
+)
 
 
 class AgentGatewayError(Exception):
@@ -51,9 +56,14 @@ class CortexCompleteAgent:
     def __init__(self, snowflake_connection, llm) -> None:
         self.llm = llm
         self.connection = snowflake_connection
-        self.connection.cursor().execute(
-            f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
-        )
+        if not _determine_runtime():
+            self.connection.cursor().execute(
+                f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
+            )
+        else:
+            self.connection.connection.cursor().execute(
+                f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
+            )
 
     async def arun(self, messages: list[str, CompleteRequestMessagesInner]) -> str:
         """Run the LLM."""
