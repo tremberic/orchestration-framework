@@ -17,12 +17,12 @@ import json
 import re
 import threading
 from collections.abc import Sequence
-from typing import Any, Dict, List, Mapping, Optional, Union, cast
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.snowpark import Session
 
-from agent_gateway.gateway.constants import END_OF_PLAN, FUSION_REPLAN
+from agent_gateway.gateway.constants import END_OF_PLAN
 from agent_gateway.gateway.planner import Planner
 from agent_gateway.gateway.task_processor import Task, TaskProcessor
 from agent_gateway.tools.base import StructuredTool, Tool
@@ -56,9 +56,11 @@ class CortexCompleteAgent:
             f"alter session set query_tag='{get_tag('CortexAnalystTool')}'"
         )
 
-    async def arun(self, prompt: str) -> str:
+    async def arun(self, prompt: str, structure=None) -> str:
         """Run the LLM."""
-        headers, url, data = self._prepare_llm_request(prompt=prompt)
+        headers, url, data = self._prepare_llm_request(
+            prompt=prompt, structure=structure
+        )
 
         try:
             response_text = await post_cortex_request(
@@ -82,11 +84,15 @@ class CortexCompleteAgent:
                 message=f"Failed Cortex LLM Request. Unable to parse response. See details:{response_text}"
             )
 
-    def _prepare_llm_request(self, prompt):
+    def _prepare_llm_request(self, prompt, structure=None):
         eb = CortexEndpointBuilder(self.session)
         url = eb.get_complete_endpoint()
         headers = eb.get_complete_headers()
-        data = {"model": self.llm, "messages": [{"content": prompt}]}
+        data = {
+            "model": self.llm,
+            "messages": [{"content": prompt}],
+            "response_format": structure,
+        }
 
         return headers, url, data
 
@@ -135,6 +141,28 @@ class SummarizationAgent(Tool):
         super().__init__(
             name=tool_name, func=summarizer.arun, description=tool_description
         )
+
+
+fusion_response_format = {
+    "type": "json",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "thought": {"type": "string", "title": "Thought"},
+            "action": {
+                "type": "string",
+                "title": "Action",
+                "enum": [
+                    "Replan",
+                    "Finish",
+                ],
+            },
+            "answer": {"type": "string", "title": "Answer"},
+        },
+        "required": ["thought", "answer", "action"],
+        "title": "FuseTemplate",
+    },
+}
 
 
 class Agent:
@@ -222,67 +250,6 @@ class Agent:
     def output_keys(self) -> List[str]:
         return [self.output_key]
 
-    def _parse_fusion_output(self, raw_answer: str) -> str:
-        """We expect the fusion output format to be:
-        ```
-        Thought: xxx
-        Action: Finish/Replan(yyy)
-        ```
-        Returns:
-            thought (xxx)
-            answer (yyy)
-            is_replan (True/False)
-        """
-        # Extracting the Thought
-        thought_pattern = r"Thought: (.*?)\n\n"
-        thought_match = re.search(thought_pattern, raw_answer)
-        thought = thought_match.group(1) if thought_match else None
-
-        # Extracting the Answer
-        is_replan = FUSION_REPLAN in raw_answer
-
-        if is_replan:
-            answer = self._extract_replan_message(raw_answer)
-        else:
-            answer = self._extract_answer(raw_answer)
-
-        if answer is None:
-            raise AgentGatewayError(
-                message=f"Unable to parse final answer. Raw answer is:{raw_answer}"
-            )
-
-        return thought, answer, is_replan
-
-    @staticmethod
-    def _extract_answer(raw_answer):
-        start_marker = "Action: Finish"
-        end_marker = "<END_OF_RESPONSE>"
-
-        # if end market not in response, inject it
-        if end_marker not in raw_answer:
-            raw_answer += end_marker
-
-        # Match both parenthesized and non-parenthesized versions
-        pattern = re.compile(
-            rf"{re.escape(start_marker)}[(\s]*(.*?)(?:\s*\))?\s*{re.escape(end_marker)}",
-            re.DOTALL,
-        )
-
-        match = pattern.search(raw_answer)
-        return match.group(1).strip() if match else None
-
-    def _extract_replan_message(self, raw_answer):
-        replan_start = "Action: Replan("
-        replan_index = raw_answer.find(replan_start)
-        if replan_index != -1:
-            replan_index += len(replan_start)
-            return raw_answer[replan_index : raw_answer.rfind(")")].strip()
-        return (
-            "We couldn't find the information you're looking for. You can try "
-            "rephrasing your request or validate that the provided tools contain "
-            "sufficient information."
-        )
-
     def _generate_context_for_replanner(
         self, tasks: Mapping[int, Task], fusion_thought: str
     ) -> str:
@@ -333,11 +300,17 @@ class Agent:
             # "---\n"
         )
 
-        response = await self.agent.arun(prompt)
-        raw_answer = cast(str, response)
+        response = await self.agent.arun(prompt, structure=fusion_response_format)
+        raw_struct_response = json.loads(response)
+
         gateway_logger.log("DEBUG", "Question: \n", input_query, block=True)
-        gateway_logger.log("DEBUG", "Raw Answer: \n", raw_answer, block=True)
-        thought, answer, is_replan = self._parse_fusion_output(raw_answer)
+        gateway_logger.log("DEBUG", "Raw Answer: \n", response, block=True)
+
+        thought, answer, is_replan = (
+            raw_struct_response["thought"],
+            raw_struct_response["answer"],
+            True if "Replan" == raw_struct_response["action"] else False,
+        )
         sources = self._extract_sources(agent_scratchpad)
         if is_final:
             # If final, we don't need to replan
@@ -533,6 +506,8 @@ class Agent:
                     if not task.is_fuse
                 ]
             )
+
+            gateway_logger.log("DEBUG", f"scratch: {agent_scratchpad}")
 
             agent_scratchpad = agent_scratchpad.strip()
 

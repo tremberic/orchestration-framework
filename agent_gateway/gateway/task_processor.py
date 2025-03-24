@@ -116,6 +116,8 @@ class TaskProcessor:
         self.remaining_tasks = set()
 
     def set_tasks(self, tasks: dict[str, Any]):
+        gateway_logger.log("DEBUG", f"setting {tasks}")
+        gateway_logger.log("DEBUG", f"setting type {type(tasks)}")
         self.tasks.update(tasks)
         self.tasks_done.update({task_idx: asyncio.Event() for task_idx in tasks})
         self.remaining_tasks.update(set(tasks.keys()))

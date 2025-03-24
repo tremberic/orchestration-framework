@@ -166,6 +166,33 @@ class StreamingGraphParser:
         return self._match_buffer_and_generate_task("")
 
 
+plan_structure = {
+    "type": "object",
+    "properties": {
+        "plan": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "thought": {"type": "string"},
+                    "idx": {"type": "number"},
+                    "tool": {"type": "string"},
+                    "args": {"type": "string"},
+                },
+                "required": ["thought", "idx", "tool", "args"],
+            },
+        }
+    },
+    "required": ["plan"],
+}
+
+# Then use in your request:
+planner_response_format = {
+    "type": "json",  # This is correct for Snowflake's response format
+    "schema": plan_structure,
+}
+
+
 class Planner:
     def __init__(
         self,
@@ -210,7 +237,9 @@ class Planner:
             human_prompt = f"Question: {inputs['input']}"
 
         message = system_prompt + "\n\n" + human_prompt
-        headers, url, data = self._prepare_llm_request(prompt=message)
+        headers, url, data = self._prepare_llm_request(
+            prompt=message, response_format=planner_response_format
+        )
         response_text = await post_cortex_request(url=url, headers=headers, data=data)
 
         try:
@@ -219,18 +248,22 @@ class Planner:
 
             snowflake_response = self._parse_snowflake_response(response_text)
 
-            return snowflake_response
+            return json.loads(snowflake_response)
 
         except Exception:
             raise AgentGatewayError(
                 message=f"Failed Cortex LLM Request. Unable to parse response. See details:{response_text}"
             )
 
-    def _prepare_llm_request(self, prompt):
+    def _prepare_llm_request(self, prompt, response_format=None):
         eb = CortexEndpointBuilder(self.session)
         url = eb.get_complete_endpoint()
         headers = eb.get_complete_headers()
-        data = {"model": self.llm, "messages": [{"content": prompt}]}
+        data = {
+            "model": self.llm,
+            "messages": [{"content": prompt}],
+            "response_format": response_format,
+        }
 
         return headers, url, data
 
@@ -272,8 +305,9 @@ class Planner:
             inputs=inputs,
             is_replan=is_replan,
         )
-        llm_response = llm_response + "\n"
-        plan_response = self.output_parser.parse(llm_response)
+        # llm_response = llm_response + "\n"
+        plan_response = self.output_parser.new_parse(llm_response.get("plan"))
+        gateway_logger.log("DEBUG", f"parse new parse:{plan_response}")
         return plan_response
 
     async def aplan(

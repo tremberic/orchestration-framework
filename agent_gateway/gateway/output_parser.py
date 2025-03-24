@@ -45,6 +45,38 @@ class GatewayPlanParser:
         super().__init__(**kwargs)
         self.tools = tools
 
+    def new_parse(self, plan: dict) -> list[str]:
+        # final_matches = _update_task_list_with_summarization(matches)
+
+        graph_dict = {}
+        gateway_logger.log("DEBUG", plan)
+
+        for match in plan:
+            # idx = 1, function = "search", args = "Ronaldo number of kids"
+            # thought will be the preceding thought, if any, otherwise an empty string
+            thought, idx, tool_name, args, _ = (
+                match["thought"],
+                match["idx"],
+                match["tool"],
+                match["args"],
+                "",
+            )
+            idx = int(idx)
+
+            task = instantiate_task(
+                tools=self.tools,
+                idx=idx,
+                tool_name=tool_name,
+                args=args,
+                thought=thought,
+            )
+
+            graph_dict[idx] = task
+            if task.is_fuse:
+                break
+
+        return graph_dict
+
     def parse(self, text: str) -> list[str]:
         pattern = rf"(?:{THOUGHT_PATTERN}\n)?{ACTION_PATTERN}"
         matches = re.findall(pattern, text, re.DOTALL)
