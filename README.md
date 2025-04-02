@@ -1,3 +1,7 @@
+<a href="https://emerging-solutions-toolbox.streamlit.app/">
+    <img src="https://github.com/user-attachments/assets/aa206d11-1d86-4f32-8a6d-49fe9715b098" alt="image" width="125"/>
+</a>
+
 # Agentic Orchestration Framework
 
 The Agent Gateway is an agentic orchestration framework that offers native support for
