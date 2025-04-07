@@ -17,7 +17,6 @@ dependencies = [
     "asyncio>=3.4.3",
     "aiohttp>=3.10.9,<4.0",
     "pydantic>=2.9.2,<3.0",
-    "fastapi>=0.115.12",
 ]
 
 [project.urls]
@@ -26,7 +25,7 @@ Issues = "https://github.com/Snowflake-Labs/orchestration-framework/issues"
 
 [project.optional-dependencies]
 trulens = [
-   "trulens>=1.4.5",
+    "trulens>=1.4.5",
     "trulens-connectors-snowflake"
 ]
 dev = [
@@ -42,8 +41,11 @@ streamlit = [
     "python-dotenv>=1.0.1"
 ]
 fastapi = [
-  "fastapi"
+    "fastapi>=0.115.12,<1.0",
+    "fastapi-cli==0.0.7",
+    "uvicorn==0.34.0",
 ]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

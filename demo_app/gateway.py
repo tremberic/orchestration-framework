@@ -1,28 +1,16 @@
+import os
 from contextlib import asynccontextmanager
+from typing import Any, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Any, Optional
-import os
-
+from snowflake.snowpark import Session
 from agent_gateway import Agent
 from agent_gateway.tools.snowflake_tools import (
     CortexSearchTool,
-)  # PythonTool,CortexAnalystTool,
-from snowflake.snowpark import Session
+)
+from agent_gateway.tools.utils import _determine_runtime
 
-
-# Models for request/response
-class QueryRequest(BaseModel):
-    query: str
-    memory: bool = True
-
-
-class QueryResponse(BaseModel):
-    output: str
-    sources: Optional[Any] = None
-
-
-# Global agent instance
 agent = None
 
 
@@ -32,26 +20,34 @@ async def lifespan(app: FastAPI):
     global agent
     try:
         # Initialize Snowflake connection
-        connection = Session.builder.configs(
-            {
-                "account": os.environ.get("SNOWFLAKE_ACCOUNT"),
-                "user": os.environ.get("SNOWFLAKE_USER"),
-                "password": os.environ.get("SNOWFLAKE_PASSWORD"),
-                "role": os.environ.get("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
-                "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE"),
-                "database": os.environ.get("SNOWFLAKE_DATABASE"),
-                "schema": os.environ.get("SNOWFLAKE_SCHEMA"),
+        connection_parameters = {
+            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
+            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
+            "database": os.getenv("SNOWFLAKE_DATABASE"),
+            "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+        }
+
+        if _determine_runtime():
+            connection_parameters = connection_parameters | {
+                "host": os.getenv("SNOWFLAKE_HOST"),
+                "authenticator": "oauth",
             }
-        ).create()
+            with open("/snowflake/session/token") as token_file:
+                connection_parameters["token"] = token_file.read()
+        else:
+            connection_parameters = connection_parameters | {
+                "user": os.getenv("SNOWFLAKE_USER"),
+                "password": os.getenv("SNOWFLAKE_PASSWORD"),
+            }
+        connection = Session.builder.configs(connection_parameters).create()
 
         # Define your tools
         tools = [
-            # Add your tools here, for example:
             CortexSearchTool(
-                service_name="your_service",
-                service_topic="your_topic",
-                data_description="your_description",
-                retrieval_columns="your_columns",
+                service_name="SEC_SEARCH_SERVICE",
+                service_topic="Snowflake's business,product offerings,and performance",
+                data_description="Snowflake annual reports",
+                retrieval_columns=["CHUNK"],
                 snowflake_connection=connection,
             ),
         ]
@@ -72,6 +68,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Agent Gateway API", lifespan=lifespan)
 
 
+class QueryRequest(BaseModel):
+    request: str
+
+
+class QueryResponse(BaseModel):
+    output: str
+    sources: Optional[Any] = None
+
+
 @app.post("/query", response_model=QueryResponse)
 async def process_query(request: QueryRequest):
     global agent
@@ -79,7 +84,8 @@ async def process_query(request: QueryRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        result = await agent.acall(request.query)
+        print(request)
+        result = await agent.acall(request)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
