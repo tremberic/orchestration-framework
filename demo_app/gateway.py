@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from snowflake.snowpark import Session
 from agent_gateway import Agent
@@ -68,25 +68,35 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Agent Gateway API", lifespan=lifespan)
 
 
-class QueryRequest(BaseModel):
-    request: str
-
-
 class QueryResponse(BaseModel):
     output: str
     sources: Optional[Any] = None
 
 
 @app.post("/query", response_model=QueryResponse)
-async def process_query(request: QueryRequest):
+async def process_query(request: Request):
     global agent
     if agent is None:
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        print(request)
-        result = await agent.acall(request)
-        return result
+        body = await request.json()
+
+        # Check Snowflake-style input
+        if "data" not in body or not body["data"]:
+            raise HTTPException(
+                status_code=400, detail="Invalid input format from Snowflake"
+            )
+
+        # Extract query from: [row_index, {"request": "your string"}]
+        row_index, request_obj = body["data"][0]
+        query_str = request_obj["request"]
+
+        result = await agent.acall(query_str)
+
+        # Wrap output in Snowflake-style response
+        return {"data": [[row_index, result.output]]}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
