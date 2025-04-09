@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from snowflake.snowpark import Session
 from agent_gateway import Agent
@@ -10,8 +10,11 @@ from agent_gateway.tools.snowflake_tools import (
     CortexSearchTool,
 )
 from agent_gateway.tools.utils import _determine_runtime
+import logging
 
 agent = None
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -73,32 +76,20 @@ class QueryResponse(BaseModel):
     sources: Optional[Any] = None
 
 
-@app.post("/query", response_model=QueryResponse)
-async def process_query(request: Request):
+class QueryRequest(BaseModel):
+    request: str
+
+
+@app.post("/query")
+async def process_query(query: QueryRequest):
     global agent
     if agent is None:
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
-    try:
-        body = await request.json()
+    logger.debug(f"Received request: {query.request}")
+    results = await agent.acall(query.request)
 
-        # Check Snowflake-style input
-        if "data" not in body or not body["data"]:
-            raise HTTPException(
-                status_code=400, detail="Invalid input format from Snowflake"
-            )
-
-        # Extract query from: [row_index, {"request": "your string"}]
-        row_index, request_obj = body["data"][0]
-        query_str = request_obj["request"]
-
-        result = await agent.acall(query_str)
-
-        # Wrap output in Snowflake-style response
-        return {"data": [[row_index, result.output]]}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+    return results
 
 
 @app.get("/health")
