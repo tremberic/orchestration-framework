@@ -52,7 +52,6 @@ if _should_instrument():
     from trulens.providers.cortex import Cortex
     from trulens.core import Feedback
     from trulens.core import Select
-    import numpy as np
 
 
 class AgentGatewayError(Exception):
@@ -654,46 +653,6 @@ if _should_instrument():
                         )
                         .on_input()
                         .on_output()
-                    )
-
-                if "context_relevance_search" in evals:
-                    feedback_map["context_relevance_search"] = (
-                        Feedback(
-                            provider.context_relevance_with_cot_reasons,
-                            name="Context Relevance - Search",
-                        )
-                        .on_input()
-                        .on(
-                            Select.Record.app.planner.tools[0].asearch.rets[:].output[:]
-                        )
-                        .aggregate(np.mean)
-                    )
-
-                if "context_relevance_analyst" in evals:
-                    custom_criteria = """
-                    Evaluate if the context contains relevant information to answer the user's question.
-                    Consider JSON or dictionary-formatted data as relevant when the keys match concepts in the user's question.
-                    For example, if the user asks about a company's market cap, context with MARKETCAP data is relevant even if presented as raw numbers.
-                    Numerical data should be considered relevant when it represents the specific metrics being asked about,
-                    regardless of whether it's already formatted for human readability.
-                    """
-                    feedback_map["context_relevance_analyst"] = (
-                        Feedback(
-                            provider.context_relevance_with_cot_reasons,
-                            name="Context Relevance - Query",
-                            combinations="zip",
-                        )
-                        .on(
-                            Select.Record.app.planner.tools[
-                                1
-                            ]._process_analyst_message.args
-                        )
-                        .on(
-                            Select.Record.app.planner.tools[
-                                1
-                            ]._process_analyst_message.rets.output[:]
-                        )
-                        .aggregate(np.mean)
                     )
 
             # Pass the snowpark session to Agent for its snowflake_connection
