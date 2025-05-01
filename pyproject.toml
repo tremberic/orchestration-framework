@@ -26,7 +26,8 @@ Issues = "https://github.com/Snowflake-Labs/orchestration-framework/issues"
 [project.optional-dependencies]
 trulens = [
    "trulens>=1.4.5",
-    "trulens-connectors-snowflake"
+    "trulens-connectors-snowflake",
+    "trulens-providers-cortex"
 ]
 dev = [
     "pre-commit>=4.0.1,<5.0",
