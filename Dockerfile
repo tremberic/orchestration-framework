@@ -26,4 +26,4 @@ ENTRYPOINT []
 
 EXPOSE 80
 
-CMD ["fastapi", "run", "/app/demo_app/gateway.py", "--port", "80"]
+CMD ["uvicorn", "app.demo_app.gateway:app", "--host", "0.0.0.0", "--port", "80"]
