@@ -108,7 +108,7 @@ class JWTGenerator(object):
         :return: The account identifier in a form that can be used to generate the JWT.
         """
         account = raw_account
-        if not ".global" in account:
+        if ".global" not in account:
             # Handle the general case.
             idx = account.find(".")
             if idx > 0:

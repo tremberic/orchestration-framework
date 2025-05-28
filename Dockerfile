@@ -1,29 +1,6 @@
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-
-ENV UV_PYTHON_DOWNLOADS=0
-
-WORKDIR /app
-
-COPY pyproject.toml uv.lock ./
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev --extra fastapi
-
-COPY . .
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra fastapi
-
-FROM python:3.11-slim-bookworm
-
-COPY --from=builder /app /app
-RUN chmod -R 755 /app
-
-ENV PATH="/app/.venv/bin:$PATH"
-
-ENTRYPOINT []
-
-EXPOSE 80
-
-CMD ["uvicorn", "app.demo_app.gateway:app", "--host", "0.0.0.0", "--port", "80"]
+ARG BASE_IMAGE=python:3.10-slim-buster
+FROM $BASE_IMAGE
+COPY echo_service.py ./
+RUN pip install --upgrade pip && \
+    pip install orchestration-framework flask
+CMD ["python3", "echo_service.py"]

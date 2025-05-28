@@ -42,13 +42,11 @@ def token_exchange(token, role, endpoint, snowflake_account_url, snowflake_accou
         "scope": scope,
         "assertion": token,
     }
-    logger.info(data)
     url = f"https://{snowflake_account}.snowflakecomputing.com/oauth/token"
     if snowflake_account_url:
         url = f"{snowflake_account_url}/oauth/token"
     logger.info("oauth url: %s" % url)
     response = requests.post(url, data=data)
-    logger.info("snowflake jwt : %s" % response.text)
     assert 200 == response.status_code, "unable to get snowflake token"
     return response.text
 
@@ -60,7 +58,7 @@ def connect_to_spcs(token, url):
         "Content-Type": "application/json",
     }
     response = requests.post(
-        f"{url}", headers=headers, json={"request": "What is the stock price of Apple?"}
+        f"{url}", headers=headers, json={"data": ["What is the stock price of Apple?"]}
     )
     logger.info("return code %s" % response.status_code)
     logger.info(response.text)
