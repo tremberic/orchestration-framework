@@ -9,6 +9,7 @@ from agent_gateway import Agent
 from agent_gateway.tools.snowflake_tools import (
     CortexSearchTool,
 )
+import asyncio
 
 SERVICE_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVICE_PORT = os.getenv("SERVER_PORT", 8080)
@@ -46,6 +47,9 @@ def echo():
         "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
         "database": os.getenv("SNOWFLAKE_DATABASE"),
         "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+        # "role": os.getenv("SNOWFLAKE_ROLE"),
+        # "user": os.getenv("SNOWFLAKE_USER"),
+        # "password": os.getenv("SNOWFLAKE_PASSWORD"),
     }
 
     connection_parameters = connection_parameters | {
@@ -77,28 +81,37 @@ def echo():
     message = request.json
     logger.debug(f"Received request: {message}")
 
-    if message is None or not message["data"]:
+    if message is None:
         logger.info("Received empty message")
         return {}
 
-    input_rows = message["data"]
-    logger.info(f"Received {len(input_rows)} rows")
+    # Handle the expected input format: {"question": "test input"}
+    if not isinstance(message, dict) or "question" not in message:
+        logger.error("Expected message format: {'question': 'your question here'}")
+        return {
+            "error": "Invalid input format. Expected: {'question': 'your question here'}"
+        }
 
-    output_rows = [[row[0], get_echo_response(row[1])] for row in input_rows]
-    logger.info(f"Produced {len(output_rows)} rows")
+    question = message["question"]
+    if not question:
+        logger.info("Received empty question")
+        return {}
 
-    results = agent.acall("What is the stock price of Apple?")
+    logger.info(f"Processing question: {question}")
 
-    logger.info(f"Agent call completed with results: {results}")
+    # Get agent response for this question
+    agent_response = asyncio.run(agent.acall(question))
+    logger.info(f"Agent response: {agent_response}")
+
+    # Return the response in the expected format
+    output_rows = [[agent_response]]
+
+    logger.info(f"Agent call completed with results: {output_rows}")
 
     response = make_response({"data": output_rows})
     response.headers["Content-type"] = "application/json"
     logger.debug(f"Sending response: {response.json}")
     return response
-
-
-def get_echo_response(input):
-    return input
 
 
 if __name__ == "__main__":
