@@ -1,7 +1,7 @@
 [project]
 name = "orchestration-framework"
 version = "1.0.3"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 description = "A multi-agent framework with native support for Snowflake services"
 authors = [
   { name = "Alejandro Herrera", email = "alejandro.herrera@snowflake.com" },

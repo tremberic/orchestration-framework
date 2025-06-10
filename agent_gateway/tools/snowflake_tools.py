@@ -23,8 +23,6 @@ from agent_gateway.tools.utils import (
 
 from functools import partial
 from inspect import signature
-from fastmcp import Client
-from fastmcp import FastMCP as FastMCPTool
 
 
 class SnowflakeError(Exception):
@@ -492,65 +490,134 @@ if is_jupyter():
         import nest_asyncio
 
         nest_asyncio.apply()
-        print("nest_asyncio applied for Jupyter compatibility")
+        gateway_logger.log("DEBUG", "nest_asyncio applied for Jupyter compatibility")
     except ImportError:
         print("Please install nest_asyncio: pip install nest_asyncio")
+
+
+def is_fastmcp_available():
+    import importlib.util
+
+    return importlib.util.find_spec("fastmcp") is not None
 
 
 class MCPTool:
     def __new__(cls, server_path: str):
         """Create and return a list of compatible tools give MCP server url or server.py path"""
+
+        if not is_fastmcp_available():
+            raise ModuleNotFoundError(
+                "Ensure fastmcp is installed in this environment. Use pip install orchestration-framework[fastmcp]."
+            )
+        else:
+            from fastmcp import Client
+            from fastmcp import FastMCP as FastMCPTool
+            import mcp.types
+
+            cls.mcptypes = mcp.types
+            cls.Client = Client
+            cls.FastMCPTool = FastMCPTool
+
         instance = super().__new__(cls)
         instance.server_path = server_path
-        tools = instance.generate_tools_from_mcp(server_path)
+        tools = instance.generate_tools_from_mcp()
+        gateway_logger.log("INFO", "MCP Tool successfully initialized")
         return tools
 
-    def generate_tools_from_mcp(self, path):
-        # get all tool info (names,descriptions,args,reqs)
-        mcps = asyncio.run(self._get_mcp_tools(path))
-        tools = [self._convert_from_mcp(mcp) for mcp in mcps]
-        return tools
+    def generate_tools_from_mcp(self):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-    def _convert_from_mcp(self, tool: FastMCPTool):
+        try:
+            mcps = loop.run_until_complete(self._get_mcp_tools(self.server_path))
+            tools = [self._convert_from_mcp_tool(mcp) for mcp in mcps]
+            return tools
+        except Exception as e:
+            gateway_logger.log("ERROR", f"Error generating MCP tools: {str(e)}")
+            raise
+
+    def _convert_from_mcp_tool(self, tool):
         args_schema = tool.inputSchema.get("properties")
         args_reqs = tool.inputSchema.get("required")
 
-        input_schema = {}
-        for arg in args_reqs:
-            type = args_schema.get(arg).get("type")
-            input_schema[arg] = type
+        if args_reqs is not None:
+            input_schema = {}
+            for arg in args_reqs:
+                type = args_schema.get(arg).get("type")
+                input_schema[arg] = type
 
-        mcp_tool_signature = f"{tool.name}({input_schema})"
+            mcp_tool_signature = f"{tool.name}({input_schema})"
+        else:
+            mcp_tool_signature = f"{tool.name}()"
+
         mcp_desc = self._generate_mcp_tool_description(
             tool_name=tool.name,
             tool_description=tool.description,
             tool_signature=mcp_tool_signature,
         )
 
-        def mcp_request(*args, **kwargs):
-            return self.mcp_tool_call(tool.name, *args, **kwargs)
+        async def mcp_request(*args, **kwargs):
+            async with self.Client(self.server_path) as client:
+                result = await client.call_tool(tool.name, *args, **kwargs)
+                return {
+                    "output": result[0].text,
+                    "sources": {
+                        "tool_type": "MCP",
+                        "tool_name": tool.name,
+                        "metadata": [{"mcp_tool": f"{tool.name} tool"}],
+                    },
+                }
 
-        return Tool(name=tool.name, func=mcp_request, description=mcp_desc)
+        return Tool(
+            name=tool.name,
+            func=mcp_request,
+            description=mcp_desc,
+            args=tool.inputSchema,
+        )
+
+    def _convert_from_mcp_resource(self, resource):
+        mcp_desc = self._generate_mcp_tool_description(
+            tool_name=resource.name,
+            tool_description=f"retrieves {resource.name} resources",
+            tool_signature=f"{resource.name}()",
+        )
+
+        async def mcp_resource_request():
+            """Args:
+            uri (AnyUrl | str): The URI of the resource to read. Can be a string or an AnyUrl object.
+
+            Returns:
+                list[mcp.types.TextResourceContents | mcp.types.BlobResourceContents]: A list of content
+                    objects, typically containing either text or binary data.
+            Raises:
+                RuntimeError: If called while the client is not connected."""
+            async with self.Client(self.server_path) as client:
+                rsrc = await client.read_resource(resource.uri)
+                return {
+                    "output": rsrc,
+                    "sources": {
+                        "tool_type": "MCP",
+                        "tool_name": resource.name,
+                        "metadata": [{"mcp_tool": f"{resource.name} tool"}],
+                    },
+                }
+
+        return Tool(name=resource.name, func=mcp_resource_request, description=mcp_desc)
 
     async def _get_mcp_tools(self, path):
         """Async function to get MCP tools."""
-        async with Client(path) as client:
-            # Directly await the coroutine
-            tools = asyncio.run(client.list_tools())
+        async with self.Client(path) as client:
+            tools = await client.list_tools()
             return tools
 
-    async def mcp_tool_call(self, name, *args, **kwargs):
-        """Async function to call an MCP tool."""
-        async with Client(self.server_path) as client:
-            result = asyncio.run(client.call_tool(name, *args, **kwargs))
-            return {
-                "output": result[0].text,
-                "sources": {
-                    "tool_type": "MCP",
-                    "tool_name": name,
-                    "metadata": [{"mcp_tool": f"{name} tool"}],
-                },
-            }
+    async def _get_mcp_resources(self, path):
+        """Async function to get MCP tools."""
+        async with self.Client(path) as client:
+            resources = await client.list_resources()
+            return resources
 
     def _generate_mcp_tool_description(
         self, tool_name: str, tool_description: str, tool_signature: str

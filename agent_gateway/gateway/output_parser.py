@@ -52,6 +52,7 @@ class GatewayPlanParser:
         pattern = rf"(?:{THOUGHT_PATTERN}\n)?{ACTION_PATTERN}"
         matches = re.findall(pattern, text, re.DOTALL)
         final_matches = _update_task_list_with_summarization(matches)
+        gateway_logger.log("DEBUG", final_matches)
 
         graph_dict = {}
         for match in final_matches:
@@ -184,9 +185,7 @@ def _find_tool(
         Tool or StructuredTool.
 
     """
-    gateway_logger.log("DEBUG", tools)
     for tool in tools:
-        gateway_logger.log("DEBUG", tool.name)
         if tool.name == tool_name:
             return tool
     raise AgentGatewayError(message=f"Tool {tool_name} not found.")

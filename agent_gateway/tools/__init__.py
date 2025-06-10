@@ -14,7 +14,26 @@ from agent_gateway.tools.snowflake_tools import (
     CortexSearchTool,
     PythonTool,
     SQLTool,
-    MCPTool,
 )
 
 __all__ = ["CortexAnalystTool", "CortexSearchTool", "PythonTool", "SQLTool", "MCPTool"]
+
+
+def is_fastmcp_available():
+    import importlib.util
+
+    return importlib.util.find_spec("fastmcp") is not None
+
+
+def __getattr__(name):
+    if name == "MCPTool":
+        if is_fastmcp_available():
+            from agent_gateway.tools.snowflake_tools import MCPTool
+
+            return MCPTool
+        else:
+            raise ModuleNotFoundError(
+                "MCPTool support requires fastmcp. Install with pip install orchestration-framework[fastmcp] or pip install fastmcp."
+            )
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
