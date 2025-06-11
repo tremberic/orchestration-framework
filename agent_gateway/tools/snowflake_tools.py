@@ -509,14 +509,14 @@ class MCPTool:
             raise ModuleNotFoundError(
                 "Ensure fastmcp is installed in this environment. Use pip install orchestration-framework[fastmcp]."
             )
-        else:
-            from fastmcp import Client
-            from fastmcp import FastMCP as FastMCPTool
-            import mcp.types
 
-            cls.mcptypes = mcp.types
-            cls.Client = Client
-            cls.FastMCPTool = FastMCPTool
+        from fastmcp import Client
+        from fastmcp import FastMCP as FastMCPTool
+        import mcp.types
+
+        cls.mcptypes = mcp.types
+        cls.Client = Client
+        cls.FastMCPTool = FastMCPTool
 
         instance = super().__new__(cls)
         instance.server_path = server_path
