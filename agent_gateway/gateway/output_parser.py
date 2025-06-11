@@ -52,7 +52,6 @@ class GatewayPlanParser:
         pattern = rf"(?:{THOUGHT_PATTERN}\n)?{ACTION_PATTERN}"
         matches = re.findall(pattern, text, re.DOTALL)
         final_matches = _update_task_list_with_summarization(matches)
-        gateway_logger.log("DEBUG", final_matches)
 
         graph_dict = {}
         for match in final_matches:
