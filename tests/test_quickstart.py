@@ -17,7 +17,13 @@ import re
 import pytest
 
 from agent_gateway import Agent
-from agent_gateway.tools import CortexAnalystTool, CortexSearchTool, PythonTool, SQLTool
+from agent_gateway.tools import (
+    CortexAnalystTool,
+    CortexSearchTool,
+    PythonTool,
+    SQLTool,
+    MCPTool,
+)
 from tests.data.sql_response import SQL_RESPONSE
 
 
@@ -146,6 +152,26 @@ def test_python_tool():
     news_search = PythonTool(**python_config)
     response = asyncio.run(news_search()).get("output")
     assert get_news() == response
+
+
+@pytest.mark.parametrize(
+    "question, answer_contains",
+    [
+        pytest.param(
+            "What is two plus two?",
+            "4",
+            id="mcp_add",
+        ),
+    ],
+)
+def test_mcp_tool(session, question, answer_contains):
+    mcp = MCPTool(server_path="tests/data/server.py")
+    agent = Agent(
+        snowflake_connection=session,
+        tools=mcp,
+    )
+    response = agent(question).get("output")
+    assert answer_contains in response
 
 
 @pytest.mark.parametrize(
