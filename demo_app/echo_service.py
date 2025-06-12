@@ -6,9 +6,7 @@ import os
 import sys
 from snowflake.snowpark import Session
 from agent_gateway import Agent
-from agent_gateway.tools.snowflake_tools import (
-    CortexSearchTool,
-)
+from agent_gateway.tools.snowflake_tools import CortexSearchTool, CortexAnalystTool
 import asyncio
 
 SERVICE_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
@@ -72,6 +70,13 @@ def echo():
             service_topic="Snowflake's business,product offerings,and performance",
             data_description="Snowflake annual reports",
             retrieval_columns=["CHUNK"],
+            snowflake_connection=connection,
+        ),
+        CortexAnalystTool(
+            semantic_model="sp500_semantic_model.yaml",
+            stage="ANALYST",
+            service_topic="S&P500 company and stock metrics",
+            data_description="a table with stock and financial metrics about S&P500 companies ",
             snowflake_connection=connection,
         ),
     ]
