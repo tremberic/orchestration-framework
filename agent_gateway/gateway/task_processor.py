@@ -22,7 +22,6 @@ from agent_gateway.tools.snowflake_tools import SnowflakeError
 
 from pydantic import BaseModel
 
-
 SCHEDULING_INTERVAL = 0.01  # seconds
 
 
@@ -65,7 +64,6 @@ def _replace_arg_mask_with_real_value(
                     if tasks[dependency].observation is not None:
                         obs = tasks[dependency].observation
 
-                        # Extract 'output' if observation is a dict-like structure
                         try:
                             if isinstance(obs, str):
                                 import ast
@@ -78,10 +76,6 @@ def _replace_arg_mask_with_real_value(
                             replacement = str(obs)
 
                         args = args.replace(arg_mask, replacement)
-                    # if tasks[dependency].observation is not None:
-                    #     args = args.replace(
-                    #         arg_mask, str(tasks[dependency].observation)
-                    #     )
         return args
     else:
         return args
@@ -89,11 +83,11 @@ def _replace_arg_mask_with_real_value(
 
 @dataclass
 class Task:
-    idx: str  # Now a string
+    idx: str
     name: str
     tool: Callable
     args: Collection[Any]
-    dependencies: Collection[str]  # list of string IDs
+    dependencies: Collection[str]
     kwargs: Dict[str, Any] = None
     stringify_rule: Optional[Callable] = None
     thought: Optional[str] = None

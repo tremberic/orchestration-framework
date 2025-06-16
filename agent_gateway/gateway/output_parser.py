@@ -209,7 +209,7 @@ def _get_dependencies_from_graph(
     idx: int, tool_name: str, args: Sequence[Any]
 ) -> dict[str, list[str]]:
     """Get dependencies from a graph."""
-    int_idx = int(idx)  # parse it so we can do numeric range
+    int_idx = int(idx)
     if tool_name == "fuse":
         # depends on all previous step IDs
         dependencies = list(range(1, int_idx))
@@ -245,12 +245,10 @@ def instantiate_task(
         args_schema = getattr(tool, "args_schema", None)
         parsed_args = _parse_llm_compiler_action_args(args, args_schema=args_schema)
 
-        # Optimized argument handling
         if isinstance(parsed_args, dict):
-            task_args = ()  # Empty tuple for positional args
-            kwargs = parsed_args  # Use dict as keyword arguments
+            task_args = ()
+            kwargs = parsed_args
         else:
-            # Handle tuple/list of positional arguments
             task_args = (
                 parsed_args if isinstance(parsed_args, tuple) else (parsed_args,)
             )
