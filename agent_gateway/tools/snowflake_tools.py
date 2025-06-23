@@ -621,6 +621,12 @@ class MCPTool:
             resources = await client.list_resources()
             return resources
 
+    async def _get_mcp_resources(self, path):
+        """Async function to get MCP tools."""
+        async with self.Client(path) as client:
+            resources = await client.list_resources()
+            return resources
+
     def _generate_mcp_tool_description(
         self, tool_name: str, tool_description: str, tool_signature: str
     ) -> str:

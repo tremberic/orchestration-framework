@@ -176,11 +176,6 @@ class TaskProcessor:
                     task.kwargs, list(task.dependencies), self.tasks
                 )
 
-            if task.kwargs:
-                task.kwargs = _replace_arg_mask_with_real_value(
-                    task.kwargs, list(task.dependencies), self.tasks
-                )
-
             parsed_args = task.args_schema(**task.kwargs)
             task.kwargs = parsed_args.model_dump()
 
@@ -188,10 +183,6 @@ class TaskProcessor:
             task.args = _replace_arg_mask_with_real_value(
                 task.args, list(task.dependencies), self.tasks
             )
-            if task.kwargs:
-                task.kwargs = _replace_arg_mask_with_real_value(
-                    task.kwargs, list(task.dependencies), self.tasks
-                )
             if task.kwargs:
                 task.kwargs = _replace_arg_mask_with_real_value(
                     task.kwargs, list(task.dependencies), self.tasks
