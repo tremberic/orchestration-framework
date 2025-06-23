@@ -147,6 +147,21 @@ def _parse_llm_compiler_action_args(args: str, args_schema: BaseModel = None):
     """Parse arguments from a string with proper quote handling."""
     args = args.strip()
 
+    # Handle multiple key-value pairs (key: "value", key: value)
+    kv_pattern = r'(\w+)\s*:\s*(?:"([^"]*)"|([^,\s]+))'
+    kv_matches = re.findall(kv_pattern, args)
+
+    if kv_matches and args_schema:
+        parsed_dict = {}
+        for match in kv_matches:
+            key = match[0]
+            # Get the non-empty value (quoted or unquoted)
+            value = match[1] if match[1] else match[2]
+            parsed_dict[key] = value
+
+        fields = list(args_schema.model_fields.keys())
+        return parsed_dict
+
     try:  # First try Python's native literal evaluation
         parsed = literal_eval(args)
         if isinstance(parsed, (list, tuple)):
@@ -194,7 +209,7 @@ def _get_dependencies_from_graph(
     idx: int, tool_name: str, args: Sequence[Any]
 ) -> dict[str, list[str]]:
     """Get dependencies from a graph."""
-    int_idx = int(idx)  # parse it so we can do numeric range
+    int_idx = int(idx)
     if tool_name == "fuse":
         # depends on all previous step IDs
         dependencies = list(range(1, int_idx))
@@ -220,6 +235,7 @@ def instantiate_task(
         tool_func = lambda x: None  # noqa: E731
         stringify_rule = None
         args_schema = None
+        task_args = ()
         kwargs = None
 
     else:
@@ -227,19 +243,22 @@ def instantiate_task(
         tool_func = tool.func
         stringify_rule = tool.stringify_rule
         args_schema = getattr(tool, "args_schema", None)
-        args = _parse_llm_compiler_action_args(args, args_schema=args_schema)
+        parsed_args = _parse_llm_compiler_action_args(args, args_schema=args_schema)
 
-        kwargs = {}
-        if isinstance(args, dict):
-            kwargs = args
+        if isinstance(parsed_args, dict):
+            task_args = ()
+            kwargs = parsed_args
+        else:
+            task_args = (
+                parsed_args if isinstance(parsed_args, tuple) else (parsed_args,)
+            )
+            kwargs = {}
 
     return Task(
         idx=idx,
         name=tool_name,
         tool=tool_func,
-        args=args
-        if not isinstance(args, dict)
-        else tuple(arg for arg in args.values() if isinstance(arg, dict)),
+        args=task_args,
         kwargs=kwargs,
         dependencies=dependencies,
         stringify_rule=stringify_rule,

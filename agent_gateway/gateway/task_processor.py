@@ -16,12 +16,12 @@ import asyncio
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Type
+import ast
 
 from agent_gateway.tools.logger import gateway_logger
 from agent_gateway.tools.snowflake_tools import SnowflakeError
 
 from pydantic import BaseModel
-
 
 SCHEDULING_INTERVAL = 0.01  # seconds
 
@@ -52,15 +52,29 @@ def _replace_arg_mask_with_real_value(
             _replace_arg_mask_with_real_value(item, dependencies, tasks)
             for item in args
         )
+    elif isinstance(args, dict):
+        return {
+            key: _replace_arg_mask_with_real_value(value, dependencies, tasks)
+            for key, value in args.items()
+        }
     elif isinstance(args, str):
         # Sort dependencies by integer value descending, so $12 is replaced before $1
         for dependency in sorted(dependencies, key=int, reverse=True):
             for arg_mask in [f"${{{dependency}}}", f"${dependency}"]:
                 if arg_mask in args:
                     if tasks[dependency].observation is not None:
-                        args = args.replace(
-                            arg_mask, str(tasks[dependency].observation)
-                        )
+                        obs = tasks[dependency].observation
+
+                        try:
+                            if isinstance(obs, str):
+                                obs = ast.literal_eval(obs)
+                            replacement = str(
+                                obs.get("output", obs) if isinstance(obs, dict) else obs
+                            )
+                        except Exception:
+                            replacement = str(obs)
+
+                        args = args.replace(arg_mask, replacement)
         return args
     else:
         return args
@@ -68,11 +82,11 @@ def _replace_arg_mask_with_real_value(
 
 @dataclass
 class Task:
-    idx: str  # Now a string
+    idx: str
     name: str
     tool: Callable
     args: Collection[Any]
-    dependencies: Collection[str]  # list of string IDs
+    dependencies: Collection[str]
     kwargs: Dict[str, Any] = None
     stringify_rule: Optional[Callable] = None
     thought: Optional[str] = None
@@ -157,12 +171,22 @@ class TaskProcessor:
 
     def _preprocess_args(self, task: Task):
         if task.args_schema is not None:
+            if task.kwargs:
+                task.kwargs = _replace_arg_mask_with_real_value(
+                    task.kwargs, list(task.dependencies), self.tasks
+                )
+
             parsed_args = task.args_schema(**task.kwargs)
             task.kwargs = parsed_args.model_dump()
+
         else:
             task.args = _replace_arg_mask_with_real_value(
                 task.args, list(task.dependencies), self.tasks
             )
+            if task.kwargs:
+                task.kwargs = _replace_arg_mask_with_real_value(
+                    task.kwargs, list(task.dependencies), self.tasks
+                )
 
     async def _run_task(self, task: Task):
         self._preprocess_args(task)
