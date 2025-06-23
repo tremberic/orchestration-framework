@@ -218,7 +218,6 @@ def _get_dependencies_from_graph(
             i for i in range(1, int_idx) if default_dependency_rule(i, str(args))
         ]
 
-    # Convert each numeric dependency to a string
     return [str(d) for d in dependencies]
 
 
