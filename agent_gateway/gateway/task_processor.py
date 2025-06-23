@@ -16,6 +16,7 @@ import asyncio
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Type
+import ast
 
 from agent_gateway.tools.logger import gateway_logger
 from agent_gateway.tools.snowflake_tools import SnowflakeError
@@ -66,8 +67,6 @@ def _replace_arg_mask_with_real_value(
 
                         try:
                             if isinstance(obs, str):
-                                import ast
-
                                 obs = ast.literal_eval(obs)
                             replacement = str(
                                 obs.get("output", obs) if isinstance(obs, dict) else obs
